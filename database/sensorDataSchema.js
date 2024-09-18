@@ -1,12 +1,12 @@
 const mongoose = require('mongoose');
 
 const sensorSchema = new mongoose.Schema({
-    windSpeedmsData: Number,
-    totalSpeedData: Number,
-    batteryVoltageData: Number,
-    hourSpeed: Number,
-    date: { type: Date, default: Date.now },
-});
+  sensorName: { type: String, required: true },
+  windSpeedmsData: { type: Number, required: true },
+  totalSpeedData: { type: Number, required: true },
+  batteryVoltageData: { type: Number, required: true },
+  date: { type: Number, required: true } // UNIX timestamp
+}, { versionKey: false }); // Remove __v field
 
 const U1AnalogSchema = mongoose.model('U1_analog', sensorSchema, 'U1_analog');
 const M1Schema = mongoose.model('M1', sensorSchema, 'M1');
