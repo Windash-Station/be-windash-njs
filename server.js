@@ -1,68 +1,63 @@
-require('./database/connection');
-const { M1Schema, U1AnalogSchema, U2RS4852Schema } = require('./database/sensorDataSchema');
 const express = require('express');
-const os = require('os');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const {U2RS4852Schema} = require('./database/sensorDataSchema'); // The schema from the previous step
 
-const getIPAddress = () => {
-    const networkInterfaces = os.networkInterfaces();
-    for (let interfaceName in networkInterfaces) {
-      for (let iface of networkInterfaces[interfaceName]) {
-        if (iface.family === 'IPv4' && !iface.internal) {
-          return iface.address;
-        }
-      }
-    }
-    return '127.0.0.1';
-  };
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-const createExpressServer = async (sensorName, port) => {
-  const app = express();
-  const ip = getIPAddress();
-  let SensorData;
-  app.use(express.json());
+mongoose.connect('mongodb+srv://jawwad:Growmore1@cluster0.bedgwkj.mongodb.net/windash_station?retryWrites=true&w=majority', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
 
-  if (sensorName === "U1_analog") {
-    SensorData = U1AnalogSchema;
-  } else if (sensorName === "U2_RS485_2") {
-    SensorData = U2RS4852Schema;
-  } else {
-    SensorData = M1Schema;
-  } 
+// Endpoint to fetch all sensor data
+app.get('/get/sensor-data/all', async (req, res) => {
+  try {
+    const sensorData = await U2RS4852Schema.find();
+    res.json(sensorData);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
 
-  app.listen(port, ip, () => {
-    console.log(`[server.js] Server for ${sensorName} is running at http://${ip}:${port}`);
-  });
+// Endpoint to fetch sensor data for a specific time range
+app.get('/get/sensor-data/range/:range', async (req, res) => {
+  const { range } = req.params;
+  const now = Date.now();
 
-  app.get('/', (req, res) => {
-    res.send(`Home page for server running on port ${port}`);
-  });
+  let query = {};
+  switch (range) {
+    case '5m':
+      query.date = { $gte: now - 5 * 60 * 1000 }; // last 5 minutes
+      break;
+    case '30m':
+      query.date = { $gte: now - 30 * 60 * 1000 }; // last 30 minutes
+      break;
+    case '1h':
+      query.date = { $gte: now - 60 * 60 * 1000 }; // last 1 hours
+      break;
+      case '3h':
+        query.date = { $gte: now - 180 * 60 * 1000 }; // last 3 hours
+        break;
+    case '12h':
+        query.date = { $gte: now - 720 * 60 * 1000 }
+        break;
+    default:
+      return res.status(400).json({ message: 'Invalid range' });
+  }
 
-  app.get('/get/sensor-data/all/', async (req, res) => {
-    try {
-        console.log(port);
-        const sensorData = await SensorData.find();
-        res.send(sensorData);
-    } catch (error) {
-        res.send("Internal server error: ", error);
-    }
-  });
+  try {
+    const sensorData = await U2RS4852Schema.find(query);
+    res.json(sensorData);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
 
-  app.post('/post/sensor-data/', async (req, res) => {
-    try {
-    console.log(req.body);
-      const { windSpeedmsData, totalSpeedData, batteryVoltageData, hourSpeed } = req.body;
-      console.log(windSpeedmsData, totalSpeedData, batteryVoltageData, hourSpeed);
-
-      const newData = new SensorData({ windSpeedmsData, totalSpeedData, batteryVoltageData, hourSpeed });
-      await newData.save();
-  
-      res.status(200).send("Data received and saved successfully");
-    } catch (error) {
-      res.status(500).send(error.message);  
-    }
-  });
-};
-
-createExpressServer("U1_analog", 3161);
-createExpressServer("M1", 3162);
-createExpressServer("U2_RS485_2", 3163);
+app.listen(3000, () => {
+  console.log('Server running on port 3000');
+});
