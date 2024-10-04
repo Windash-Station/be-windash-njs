@@ -1,25 +1,20 @@
 {
   "dependencies": {
-    "amqplib": "^0.10.4",
     "body-parser": "^1.20.3",
-    "cors": "^2.8.5",
     "express": "^4.21.0",
-    "mongoose": "^8.6.2",
+    "mongoose": "^8.7.0",
     "mqtt": "^5.10.1",
-    "nodemon": "^3.1.4",
-    "react-native-websocket": "^1.0.2",
-    "socket.io": "^4.7.5",
-    "ws": "^8.18.0"
+    "nodemon": "^3.1.7"
   },
-  "name": "be-windash-njs",
+  "name": "mqtt_be",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "description": ""
 }
