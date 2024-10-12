@@ -8,7 +8,7 @@ const app = express();
 app.use(bodyParser.json());
 
 // MongoDB connection (optional if storing in MongoDB)
-mongoose.connect('mongodb://localhost:27017/sensorData');
+mongoose.connect('mongodb+srv://iotfiysolution:iotfiysolution@iotfiy.oxkhm.mongodb.net/sensorData?retryWrites=true&w=majority&appName=IoTFIY');
 const analogSchema = new mongoose.Schema({
     sensorName: String,
     windSpeedmsData: Number,
