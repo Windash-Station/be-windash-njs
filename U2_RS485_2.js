@@ -98,7 +98,17 @@ function getStartTime(hoursAgo) {
     res.json(data);
   });
   
+  app.get('/api/data/week', async (req, res) => {
+    const startTime = getStartTime(168);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+  });
 
+  app.get('/api/data/month', async (req, res) => {
+    const startTime = getStartTime(730);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+  });
 // Simple API to fetch stored analog data (Optional)
 app.get('/api/analog-data', async (req, res) => {
     try {

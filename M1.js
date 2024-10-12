@@ -1,164 +1,154 @@
-import React, { useState, useEffect } from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  Dimensions,
-  Button,
-  View,
-} from 'react-native';
-import axios from 'axios';
-import { BarChart } from 'react-native-chart-kit';
+const mqtt = require('mqtt');
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
 
-export default function M1() {
-  const [sensorData, setSensorData] = useState([]);
-  const [timeLabels, setTimeLabels] = useState([]);
-  const [currentMode, setCurrentMode] = useState('');
+// Express App Setup
+const app = express();
+app.use(bodyParser.json());
 
-  const apiBaseUrl = 'http://192.168.100.8:3002/api';
+// MongoDB connection (optional if storing in MongoDB)
+mongoose.connect('mongodb://localhost:27017/sensorData');
+const analogSchema = new mongoose.Schema({
+    sensorName: String,
+    windSpeedmsData: Number,
+    totalSpeedData: Number,
+    batteryVoltageData: Number,
+    timestamp: { type: Date, default: Date.now }
+});
+const AnalogData = mongoose.model('M1', analogSchema, 'M1');
 
-  useEffect(() => {
-    // Fetch default data when component mounts
-    setCurrentMode('6hr');
-    fetchSpecialisedHistoricalData('data/last6hours', 3);
-  }, []);
+// MQTT broker details
+const mqttBrokerUrl = 'mqtt://broker.hivemq.com:1883';  
+const mqttTopic = 'M1/data';       
+        
+// Connect to MQTT Broker
+const client = mqtt.connect(mqttBrokerUrl);
 
-  const aggregateSpecialisedData = (data, numIntervals) => {
-    const totalDataPoints = data.length;
-    const intervalSize = Math.floor(totalDataPoints / numIntervals);
+client.on('connect', () => {
+    console.log('Connected to MQTT broker');
+    // Subscribe to the MQTT topic where the ESP8266 publishes
+    client.subscribe(mqttTopic, (err) => {
+        if (!err) {
+            console.log(`Subscribed to topic: ${mqttTopic}`);
+        } else {
+            console.error('Failed to subscribe to topic:', err);
+        }
+    });
+});
 
-    const aggregatedData = [];
-    const aggregatedLabels = [];
+// Handle incoming MQTT messages
+client.on('message', (topic, message) => {
+    if (topic === mqttTopic) {
+        try {
+            // Parse the incoming message (JSON string)
+            const sensorData = JSON.parse(message.toString());
 
-    for (let i = 0; i < numIntervals; i++) {
-      const startIdx = i * intervalSize;
-      const endIdx = i === numIntervals - 1 ? totalDataPoints : (i + 1) * intervalSize;
+            console.log(`Received data from topic: ${topic}`);
+            console.log(sensorData);
 
-      const intervalData = data.slice(startIdx, endIdx);
-
-      const sum = intervalData.reduce((acc, item) => acc + item.windSpeedmsData, 0);
-      const average = sum / intervalData.length;
-      aggregatedData.push(average);
-
-      // Use the timestamp of the first data point in the interval for labeling
-      const labelTimestamp = new Date(intervalData[0].timestamp);
-      const label = `${labelTimestamp.getHours()}:${labelTimestamp.getMinutes()}`;
-      aggregatedLabels.push(label);
+            // Store data in MongoDB (Optional)
+            const newData = new AnalogData(sensorData);
+            newData.save()
+                .then(() => console.log('Data saved to database'))
+                .catch(err => console.error('Error saving data:', err));
+        } catch (error) {
+            console.error('Error parsing MQTT message:', error);
+        }
     }
+});
 
-    return { aggregatedData, aggregatedLabels };
-  };
-
-  const fetchSpecialisedHistoricalData = async (endpoint, numIntervals) => {
-    try {
-      console.log('Fetching data from API...');
-      const response = await axios.get(`${apiBaseUrl}/${endpoint}`);
-      const data = response.data;
-
-      console.log('Data fetched:', data);
-
-      if (Array.isArray(data) && data.length > 0) {
-        const { aggregatedData, aggregatedLabels } = aggregateSpecialisedData(
-          data,
-          numIntervals
-        );
-
-        setSensorData(aggregatedData);
-        setTimeLabels(aggregatedLabels);
-      } else {
-        console.warn('No historical data received from the backend.');
-      }
-    } catch (error) {
-      console.error('Error fetching historical data:', error);
-    }
-  };
-
-  const handleModeChange = (mode, apiEndpoint, numIntervals) => {
-    console.log(`Button pressed for mode: ${mode}`);
-    setCurrentMode(mode);
-    fetchSpecialisedHistoricalData(apiEndpoint, numIntervals);
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <Text style={styles.title}>
-          M1 Sensor Data {currentMode ? `(${currentMode} Data)` : ''}
-        </Text>
-
-        <View style={styles.buttonContainer}>
-          <Button
-            title="Last 6 Hours"
-            onPress={() => handleModeChange('6hr', 'data/last6hours', 3)}
-          />
-          <Button
-            title="Last 12 Hours"
-            onPress={() => handleModeChange('12hr', 'data/last12hours', 3)}
-          />
-          <Button
-            title="Last 24 Hours"
-            onPress={() => handleModeChange('24hr', 'data/lastday', 3)}
-          />
-        </View>
-
-        {sensorData.length > 0 && timeLabels.length > 0 ? (
-          <BarChart
-            data={{
-              labels: timeLabels,
-              datasets: [
-                {
-                  data: sensorData,
-                },
-              ],
-            }}
-            width={Dimensions.get('window').width - 30}
-            height={220}
-            chartConfig={{
-              backgroundColor: '#e26a00',
-              backgroundGradientFrom: '#fb8c00',
-              backgroundGradientTo: '#ffa726',
-              decimalPlaces: 2,
-              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              style: {
-                borderRadius: 16,
-              },
-              propsForDots: {
-                r: '6',
-                strokeWidth: '2',
-                stroke: '#ffa726',
-              },
-            }}
-            bezier
-            style={{
-              marginVertical: 8,
-              borderRadius: 16,
-            }}
-          />
-        ) : (
-          <Text>Loading data...</Text>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
+// Helper function to get start time
+function getStartTime(hoursAgo) {
+    const now = new Date();
+    return new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 10,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginVertical: 10,
-    textAlign: 'center',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
+// Helper function to get start time for larger intervals (days)
+function getStartTimeByDays(daysAgo) {
+    const now = new Date();
+    return new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+}
+
+// API for live data
+app.get('/api/live-data', async (req, res) => {
+    const latestData = await AnalogData.findOne().sort({ timestamp: -1 });
+    res.json(latestData);
+});
+
+// API for 30-minute data
+app.get('/api/data/last30minutes', async (req, res) => {
+    const startTime = new Date(Date.now() - 30 * 60 * 1000);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+});
+
+// API for 1-hour data
+app.get('/api/data/lasthour', async (req, res) => {
+    const startTime = getStartTime(1);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+});
+
+// API for 6-hour data
+app.get('/api/data/last6hours', async (req, res) => {
+    const startTime = getStartTime(6);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+});
+
+// API for 12-hour data
+app.get('/api/data/last12hours', async (req, res) => {
+    const startTime = getStartTime(12);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+});
+
+// API for 24-hour data (1 day)
+app.get('/api/data/lastday', async (req, res) => {
+    const startTime = getStartTime(24);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+});
+
+// API for 1-week data
+app.get('/api/data/lastweek', async (req, res) => {
+    const startTime = getStartTimeByDays(7);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+});
+
+// API for 1-month data
+app.get('/api/data/lastmonth', async (req, res) => {
+    const startTime = getStartTimeByDays(30); // Assuming 30 days in a month
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+});
+
+  app.get('/api/data/week', async (req, res) => {
+    const startTime = getStartTime(168);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+  });
+
+  app.get('/api/data/month', async (req, res) => {
+    const startTime = getStartTime(730);
+    const data = await AnalogData.find({ timestamp: { $gte: startTime } });
+    res.json(data);
+  });
+
+// Simple API to fetch stored analog data
+app.get('/api/analog-data', async (req, res) => {
+    try {
+        const data = await AnalogData.find().sort({ timestamp: -1 }).limit(10); // Get last 10 readings
+        res.json(data);
+    } catch (error) {
+        res.status(500).send('Error retrieving data');
+    }
+});
+
+// Start the Express server
+const port = process.env.PORT || 3002;
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
 });
